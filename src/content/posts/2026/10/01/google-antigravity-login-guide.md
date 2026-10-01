@@ -263,3 +263,7 @@ I am currently working on a project that requires access to US-exclusive develop
 ### 结语
 
 看似繁琐的 Antigravity 登录流程，本质上就是 **“规避底层锁区 + 切换 Web 端解封账号风控”** 的组合拳。遵循 **“先改区、后解验”** 的清晰逻辑，便无需再被繁琐的扫码发短信折磨，彻底开启极致高效的 AI 辅助编程之旅！
+
+https://zhuanlan.zhihu.com/p/1974841556331696572
+https://linux.do/t/topic/2804240
+
