@@ -1,7 +1,7 @@
 ---
 title: "Google Antigravity 完整登录与排坑保姆级指南：搞定账号改区与二次验证（Verify）难题"
 published: 2026-10-01T18:18:00+08:00
-updated: 2026-10-01T18:50:00+08:00
+updated: 2026-10-01T19:05:00+08:00
 description: "系统梳理 Google Antigravity 登录全流程，先解决底层账号区域限制（改区申诉），再通过 Cloud Shell Web 端接码彻底搞定账号级 Verify 二次验证与扫码报错死循环。"
 image: "/uploads/2026/10/antigravity/antigravity-cover.jpg"
 tags: ["Antigravity", "Gemini", "Google", "AI 编程", "故障排查"]
@@ -55,8 +55,6 @@ Google Antigravity 作为新一代强大的 AI 辅助编程与自动化开发工
 - 参考站内文章 [《DNS 泄漏与分流配置指南》](/2026/08/16/dnsleak/) 避免境内外 DNS 串流导致的真实物理地域泄露；
 - 搭配 GitHub 开源规则脚本 [mihomo-global-override](https://github.com/yyzmiao/mihomo-global-override) 实现全自动化的规则分流与全局覆写，在底层彻底消除 IP 泄露风险；
 - 确保你的网络工具开启了系统级全局（TUN 模式）。
-
-![网络代理与TUN模式设置](/uploads/2026/10/antigravity/02-network-tun-setting.jpg)
 
 ### 优选非黑名单的原生美区（US）节点
 
