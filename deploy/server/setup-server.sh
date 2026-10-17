@@ -30,12 +30,12 @@ if ! grep -q '/var/www/yyzmiao-blog:/srv/yyzmiao:ro' "$stack/docker-compose.yml"
   sed -i '\|./nginx/certs:/etc/nginx/certs|a\      - /var/www/yyzmiao-blog:/srv/yyzmiao:ro' "$stack/docker-compose.yml"
 fi
 
-if ! grep -q '^      - gzctf$' "$stack/docker-compose.yml"; then
-  sed -i '0,/^    restart: always$/{s/^    restart: always$/    networks:\n      - default\n      - gzctf\n    restart: always/}' "$stack/docker-compose.yml"
+if ! grep -q '^      - custom_app$' "$stack/docker-compose.yml"; then
+  sed -i '0,/^    restart: always$/{s/^    restart: always$/    networks:\n      - default\n      - custom_app\n    restart: always/}' "$stack/docker-compose.yml"
 fi
 
-if ! grep -q '^  gzctf:$' "$stack/docker-compose.yml"; then
-  sed -i '/^volumes:/i networks:\n  gzctf:\n    external: true\n    name: gzctf_default\n' "$stack/docker-compose.yml"
+if ! grep -q '^  custom_app:$' "$stack/docker-compose.yml"; then
+  sed -i '/^volumes:/i networks:\n  custom_app:\n    external: true\n    name: custom_app_default\n' "$stack/docker-compose.yml"
 fi
 
 awk '/^server \{/{count++} count >= 2' "$stack/nginx/conf.d/default.conf" > /tmp/default-conf-tail

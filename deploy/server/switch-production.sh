@@ -33,6 +33,6 @@ if [ "$attempt" -ge 15 ]; then
   exit 1
 fi
 
-curl -fsS -H 'Host: note.yyzmiao.top' http://127.0.0.1/ >/dev/null
+curl -fsS -H 'Host: note.example.com' http://127.0.0.1/ >/dev/null
 docker exec app-stack-nginx-1 nginx -t
 echo 'Astro site is live; WordPress containers remain running for rollback.'

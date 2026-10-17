@@ -3,6 +3,14 @@ dist/
 .astro/
 .sites-runtime/
 .env
+.env.*
 *.log
 *.key
+*.pem
+*.crt
+*.cert
 *.tar.gz
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
