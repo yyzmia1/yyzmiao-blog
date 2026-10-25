@@ -1,7 +1,8 @@
 ---
-title: "DeepSeek Harness (dsh-purge) 与 CliRelay 联动部署实战：打造全自动 AI Agent 与多模型聚合中继架构"
+title: "DeepSeek Harness (dsh-purge) 与 CliRelay 联动部署实战：搭建全自动 AI Agent 与多模型中继架构"
 description: "深度整合 dsh-purge（DeepSeek Harness 策略清洗与执行引擎）与 CliRelay（统一 AI CLI 代理中继网关），通过 Docker Compose 极简一键编排，打通多模型负载均衡与无约束自动化工作流。"
 published: 2026-10-01T22:20:00+08:00
+updated: 2026-10-17T18:40:00+08:00
 category: "技术"
 subcategory: "AI 与自动化"
 tags: ["DeepSeek", "DSH", "dsh-purge", "CliRelay", "AI Agent", "Docker", "部署指南"]
@@ -9,123 +10,82 @@ draft: false
 lang: "zh_CN"
 ---
 
-在当今基于大语言模型（LLM）构建自主智能体（Autonomous AI Agent）与编程辅助流水线的实践中，开发者普遍会遇到两层相互制约的现实难题：
+在实际用大语言模型（LLM）跑自动化 Agent 或写代码的流水线时，很多开发者都会卡在两个地方：
 
-1. **上游服务与模型治理瓶颈**：开发过程中需要频繁调用多平台模型（如 DeepSeek、Claude、Google Gemini、OpenAI Codex、Antigravity 等），但各家 API Key 分散、速率限制（Rate Limits）严格、缺乏自动故障转移（Failover），且 Token 消耗统计与配额治理极度繁琐；
-2. **下游执行端与沙箱阻断壁垒**：官方智能体框架（如官方 DeepSeek Harness `@deepseek-ai/dsh`）在本地执行文件编辑、编译构建或自动化演练时，默认存在密集的沙箱审批弹窗（Approval Gate）、执行阻断与提示词强制覆盖，导致无人值守的全自动任务频繁中断。
+1. **上游模型管理太碎**：日常开发经常要在 DeepSeek、Claude、Google Gemini、OpenAI Codex、Antigravity 等不同平台之间切换。各家的 API Key 分散在不同配置文件里，一旦遇到单渠道限流（Rate Limits）或余额见底，任务就会直接报错中断，平时想统一算算 Token 消耗和管管配额也很麻烦。
+2. **本地沙箱弹窗不断**：官方的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（`@deepseek-ai/dsh`）在本地改文件、跑编译或执行测试脚本时，默认带有严格的沙箱隔离和审批门（Approval Gate）。稍微涉及到底层读写就会弹窗要确认，还会强制覆盖部分系统提示词，导致原本想挂机跑通的自动化任务经常停下来等人工点同意。
 
-为了彻底消除上述摩擦，本文将结合社区两个优秀的开源项目——**CliRelay** 与 **dsh-purge**，梳理一套兼具“上游多模型智能聚合中继”与“下游无障碍特权自动化执行”的全栈协同架构，并提供基于 Docker Compose 的极简一键部署方案。
+为了解决这两个痛点，我们可以把社区里的两个开源项目——[CliRelay](https://github.com/kittors/CliRelay) 和 [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 结合起来用：前端用 CliRelay 统一收口所有模型请求并负责故障自动切换，后端用加载了 dsh-purge 的容器节点放开执行权限，实现真正无人值守的自动化跑批。下面直接分享这套方案的架构逻辑和 Docker Compose 一键部署流程。
 
----
+## 一、核心开源组件说明
 
-## 目录
-- [一、核心开源项目全景解析](#一核心开源项目全景解析)
-  - [1. CliRelay：生产级统一 AI CLI 代理中继网关](#1-clirelay生产级统一-ai-cli-代理中继网关)
-  - [2. dsh-purge：DeepSeek Harness 策略清洗与红队执行插件](#2-dsh-purgedeepseek-harness-策略清洗与红队执行插件)
-- [二、协同架构拓扑与交互流](#二协同架构拓扑与交互流)
-- [三、Docker Compose 极简一键部署（推荐）](#三docker-compose-极简一键部署推荐)
-  - [1. 编排配置 (`docker-compose.yml`)](#1-编排配置-docker-composeyml)
-  - [2. 核心配置参数对照表](#2-核心配置参数对照表)
-  - [3. 一键启动流程](#3-一键启动流程)
-- [四、CliRelay 与 dsh-node 深度联动配置](#四clirelay-与-dsh-node-深度联动配置)
-  - [1. 统一中继端点与渠道接入](#1-统一中继端点与渠道接入)
-  - [2. 让 dsh-node 接入 CliRelay 路由](#2-让-dsh-node-接入-clirelay-路由)
-  - [3. 运行时观测与智能容灾](#3-运行时观测与智能容灾)
-- [五、备选轻量方案：无头终端模式 (Headless Mode)](#五备选轻量方案无头终端模式-headless-mode)
-- [六、安全合规与使用声明](#六安全合规与使用声明)
-- [参考](#参考)
+### 1. CliRelay：统一 AI CLI 代理中继网关
 
----
+[CliRelay](https://github.com/kittors/CliRelay) 是基于 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 深度改造的 AI CLI 代理服务端。它的核心作用就是把你手头零散的 AI 订阅账号、OAuth 凭据和 API Key 拢到一个统一入口里，集中做路由转发和额度管控。
 
-## 一、核心开源项目全景解析
-
-### 1. CliRelay：生产级统一 AI CLI 代理中继网关
-
-**CliRelay** 是基于 `CLIProxyAPI` 进行深度工业级增强的统一 AI CLI 代理服务器。它致力于解决团队或个人在面对众多 AI 订阅、OAuth 凭据及 API Key 时的高可用路由与资源治理问题。
-
-```
-┌───────────────────────┐         ┌──────────────┐         ┌────────────────────┐
-│   AI 编程工具 / Agent │         │              │         │  上游服务商        │
-│                       │         │              │ ──────▶ │  Google Gemini     │
-│  dsh / Harness        │ ──────▶ │   CliRelay   │ ──────▶ │  OpenAI / Codex    │
-│  Claude Code          │         │   :8317      │ ──────▶ │  Anthropic Claude  │
-│  Gemini CLI / Codex   │         │              │ ──────▶ │  DeepSeek / Qwen   │
-│  任意 OAI 兼容客户端  │         └──────────────┘         │  Antigravity / Kimi│
-└───────────────────────┘                                  └────────────────────┘
+```text
+[AI 编程工具 / Agent]                [统一中继网关]               [上游模型服务商]
+  - dsh / Harness        ──────▶                      ──────▶   - Google Gemini
+  - Claude Code          ──────▶       CliRelay       ──────▶   - OpenAI / Codex
+  - Gemini CLI / Codex   ──────▶     (端口 :8317)      ──────▶   - Anthropic Claude
+  - OpenAI 兼容客户端     ──────▶                      ──────▶   - DeepSeek / Qwen / Kimi
 ```
 
-#### 核心技术栈与特性
-- **高性能底层**：基于 Go 1.26 + Gin 开发，采用 **PostgreSQL 15+**（经由 Ent ORM）作为唯一业务事实源，配合 **Redis 7+** 承担缓存、分布式锁、限流及会话状态队列；
-- **全方位服务商适配**：原生支持 Google Gemini、Anthropic Claude、OpenAI Codex、Qwen、iFlow、Kimi、Antigravity、xAI/Grok、Vertex、AWS Bedrock 等多协议上游与 OAuth 会话保持；
-- **智能调度与治理**：
-  - **统一端点**：单一入口（如 `http://localhost:8317/v1`）聚合所有模型；
-  - **自动故障转移 (Failover) 与轮询负载均衡**：某服务商额度耗尽或超时中断时，透明切换至备用渠道；
-  - **多租户与细粒度权限**：支持角色划分（RBAC）、单 Key 独立配额、周期性用量重置与请求速率限制；
-  - **可视化控制台**：内置 `/manage` Web 控制面板与终端交互式 TUI（Bubble Tea），支持全维度监控仪表盘、请求正文检索与 OTA 在线更新。
+**技术底座与实用功能**：
 
----
+* **底层架构**：采用 Go 1.26 + Gin 编写，使用 PostgreSQL 15+（配合 Ent ORM）持久化存储配置与账单数据，搭配 Redis 7+ 处理缓存、分布式锁、限流和会话队列。
+* **多协议与会话兼容**：原生支持 Google Gemini、Anthropic Claude、OpenAI Codex、Qwen、iFlow、Kimi、Antigravity、xAI/Grok、Vertex、AWS Bedrock 等上游接口，并支持维持 OAuth 登录态。
+* **核心路由与管理能力**：
+  * **单一入口接入**：对外暴露统一的 OpenAI 兼容端点（如 `http://localhost:8317/v1`），客户端只需对接这一个地址。
+  * **故障自动切换（Failover）与负载均衡**：当某个上游渠道触发限频（HTTP 429）或超时报错时，网关会自动切到备用渠道重试，不会直接把错误抛给客户端。
+  * **细粒度配额控制**：支持多租户权限划分（RBAC），可以给每把分发出去的客户端 Key 单独设额度上限、定时重置周期和请求QPS限制。
+  * **双端可视化监控**：内置 Web 管理后台（`/manage`）和基于 Bubble Tea 的终端 TUI 界面，能直接查看实时请求日志、检索上下文正文，并支持 OTA 在线更新。
 
-### 2. dsh-purge：DeepSeek Harness 策略清洗与红队执行插件
+### 2. dsh-purge：DeepSeek Harness 策略解限与自动化插件
 
-**dsh-purge** 是专为官方 [DeepSeek Harness](https://www.deepseek.com/harness/)（`@deepseek-ai/dsh`）打造的网络安全红队评测与特权执行增强插件。
+[dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 是专门针对官方 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（`@deepseek-ai/dsh`）开发的插件，主要用于红队安全测试和受控容器环境下的全自动任务执行。
 
-官方 Harness 在运行时会在模型与操作系统之间维持一层包含提示词改写、审批确认门（Approval Gate）与严格沙箱隔离的执行约束。这在日常对话中提供了安全防线，但在执行高强度自主自动化工程、红队渗透演练或受控容器化作业时，往往会使任务频繁阻塞。
+官方 DSH 默认在模型和操作系统之间加了一层保护壳，包含提示词重写、高危操作审批弹窗和文件读写沙箱。平时手动写代码时这层保护很有用，但在跑安全靶场演练、大规模代码重构或者容器内自动化脚本时，频繁的拦截会让任务根本没法自动跑完。
 
-#### 核心机制与优势
-- **策略深度清洗**：内置 52 项 Purge 补丁与底层 Shim，安全旁路拦截层，彻底解除模型指令审查与常规文件 ACL 读写拦截；
-- **完全免审批自动化**：将宿主审批策略置为 `never`，实现文件覆写、进程派生、终端命令执行的零弹窗全自动放行；
-- **提示词与身份自由注入**：允许用户通过 `prompt-inject.md` 挂载全局系统级特权身份，不随官方版本升级而丢失；
-- **原生多环境适配**：无缝支持官方 Web 端（`dsh web`）、桌面应用（社区 DSH Desktop / 官方 EXE）以及无头终端（`dsh headless`）；
-- **幂等备份与回滚**：所有补丁在应用前均对官方原件生成 `.dshpurge.bak` 备份文件，支持随时无损还原（`/purge revert`）或卸载。
+**主要改造机制**：
 
----
+* **绕过审查与文件读写拦截**：内置 52 项 Purge 补丁与底层 Shim，在受控环境内旁路掉默认的模型指令过滤和常规文件 ACL 读写限制。
+* **全程免确认执行**：将宿主机的审批策略直接设为 `never`，无论是覆写代码文件、拉起子进程还是执行终端命令，全部静默放行，不再弹窗卡住流水线。
+* **持久化注入自定义提示词**：支持通过 `prompt-inject.md` 挂载全局系统提示词和预设角色，且不会因为官方 DSH 升级而被覆盖。
+* **多端形态通用**：同时支持官方 Web 模式（`dsh web`）、桌面客户端（如 [DSH Desktop](https://github.com/dataelement/dsh-desktop) 及官方可执行程序）以及无头命令行模式（`dsh headless`）。
+* **支持一键回滚**：打补丁前会自动把官方原文件备份为 `.dshpurge.bak`，随时可以通过 `/purge revert` 无损恢复原状。
 
-## 二、协同架构拓扑与交互流
+## 二、联动架构与任务流转过程
 
-将 **CliRelay** 作为统一智能体模型路由中心，与 **dsh-purge** 驱动的无约束特权容器节点相互联动，能够构建出一条完全闭环的现代化 AI Agent 执行中枢：
+把 CliRelay 和集成了 `dsh-purge` 的容器节点（`dsh-node`）串起来之后，整个自动化任务的执行链路非常清晰：
 
-```mermaid
-flowchart TD
-    User([开发者 / 控制端]) -->|访问控制台 :19387| DSH_Node["dsh-purge 执行节点<br/>(Docker / Web GUI)"]
-    
-    subgraph ExecutionLayer ["Agent 执行层 (dsh-purge)"]
-        DSH_Node --> DSH_Core["DSH 核心引擎<br/>(@deepseek-ai/dsh)"]
-        DSH_Core <--> Purge_Shim["Purge 策略补丁层<br/>(52 Patches / Shim)"]
-        Purge_Shim <--> Prompt_Inject["身份注入<br/>(prompt-inject.md)"]
-        Purge_Shim --> Sandbox_Root["宿主工作区挂载<br/>(/workspace)"]
-    end
-
-    subgraph GatewayLayer ["模型网关层 (CliRelay)"]
-        DSH_Core -->|OpenAI 兼容请求<br/>http://cli-proxy-api:8317/v1| CliRelay["CliRelay 代理网关<br/>(Port: 8317)"]
-        CliRelay --> PG[(PostgreSQL 15<br/>请求日志/配额事实源)]
-        CliRelay --> Redis[(Redis 7<br/>限流/缓存/队列)]
-        Web_Manage["Web 管理面板<br/>:8317/manage"] -.-> CliRelay
-    end
-
-    subgraph UpstreamProviders ["上游大模型服务商集群"]
-        CliRelay --> DeepSeek["DeepSeek API / V3 / R1"]
-        CliRelay --> Claude["Anthropic Claude 3.5 / 3.7"]
-        CliRelay --> Gemini["Google Gemini 2.0 / Pro"]
-        CliRelay --> OpenAI["OpenAI Codex / GPT-4o"]
-        CliRelay --> Antigravity["Antigravity / Qwen / Other"]
-    end
-
-    Sandbox_Root -->|特权执行 / 读写代码| HostWorkspace["宿主机项目工程代码目录"]
+```text
+[用户 / 自动化脚本]
+       │ 1. 下发任务 (Web :19387 或 CLI)
+       ▼
+[dsh-node 容器节点 (已加载 dsh-purge)]
+       │ 2. 请求模型推理 (http://cli-proxy-api:8317/v1)
+       ▼
+[CliRelay 网关] ──(监控/记账: PostgreSQL & Redis)
+       │ 3. 负载均衡 / 故障自动切换 (429/502 自动切备用源)
+       ▼
+[DeepSeek / Claude / Gemini / OpenAI 等上游模型]
+       │ 4. 返回推理结果与执行计划
+       ▼
+[dsh-node 容器节点] ──▶ 5. 免弹窗直接读写 /workspace 并执行 Shell 验证
 ```
 
-1. **会话驱动**：用户通过 Web 交互控制台（`:19387`）或自动化脚本下发工程重构、代码审计或漏洞复现任务；
-2. **模型流转**：`dsh-node` 的核心引擎向 `CliRelay` 发起模型推理请求，`CliRelay` 自动完成负载均衡、Token 记录与渠道可用性探测；若主力供应商故障，透明切换备用模型并返回响应；
-3. **自主执行**：`dsh-node` 拿到执行计划后，调用内部 Shell 工具在挂载的 `/workspace` 中直接创建、编辑文件或运行单元测试，无需任何人工确认。
+1. **下发任务**：开发者在浏览器的 Web 控制台（`:19387`）或者通过 CI 脚本向 `dsh-node` 提交重构代码、跑测试或复现漏洞的任务。
+2. **模型路由与容灾**：`dsh-node` 将推理请求发给 CliRelay 网关。CliRelay 负责统计 Token 消耗并挑选可用渠道转发；如果遇到主渠道限流或偶发抽风，网关会在底层自动切到备用模型拿到回复，保证 `dsh-node` 侧的思考链路不断。
+3. **无障碍落地执行**：`dsh-node` 收到模型给出的执行步骤后，直接在挂载的 `/workspace` 目录里增删文件、跑编译或执行单元测试，中间无需人工点击确认，直到最终完成目标。
 
----
+## 三、Docker Compose 一键部署 dsh-node（推荐）
 
-## 三、Docker Compose 极简一键部署（推荐）
+由于开启 `dsh-purge` 后 Agent 拥有很高的文件读写和命令执行权限，**强烈建议将其放在 Docker 容器里运行**。这样既能让 Agent 在容器内畅通无阻地干活，又能把破坏半径严格限制在挂载的工作目录内，保护宿主机安全。
 
-通过 Docker 容器化技术部署 `dsh-node`，既能在宿主机与 Agent 之间建立受控隔离，又能借助 Docker Compose 环境变量自动挂载 52 项 Purge 补丁与特权配置。
+### 1. 编写 `docker-compose.yml`
 
-### 1. 编排配置 (`docker-compose.yml`)
-
-在工作目录下新建 `docker-compose.yml`，填入以下标准定义：
+在本地新建一个工作目录并创建 `docker-compose.yml`：
 
 ```yaml
 version: "3.8"
@@ -155,61 +115,58 @@ services:
     command: ["dsh", "web", "--host", "0.0.0.0", "--port", "19387"]
 ```
 
-### 2. 核心配置参数对照表
+### 2. 关键配置项说明
 
-| 配置键 / 参数项 | 推荐设定值 | 对应内部行为 / 作用说明 |
+| 配置项 / 环境变量 | 设定值 | 实际作用说明 |
 | :--- | :--- | :--- |
-| `ports` | `19387:19387` | 映射本地 Web GUI 交互控制台端口。 |
-| `DSH_MODE` | `unrestricted` | 解除模型指令限制与常规沙箱审查阻断。 |
-| `DSH_SANDBOX_POLICY` | `danger-full-access` | 全开放文件读写与命令执行权限，禁用 ACL 拦截。 |
-| `DSH_APPROVAL_POLICY` | `never` | 禁用危险指令弹窗确认，全自动化放行执行流。 |
-| `DSH_AUTO_PURGE` | `true` | 容器初始化时自动校验并挂载 52 项 Purge 补丁与 Shim。 |
-| `volumes: workspace` | `./data/workspace` | 容器工作区与宿主机挂载目录，防止任务资产丢失。 |
-| `volumes: prompt-inject` | `prompt-inject.md` | 注入底层提示词与特权身份配置。 |
-| `security_opt / cap_add` | `SYS_ADMIN / unconfined` | 为反重力执行引擎提供底层环境穿透能力，避免容器隔离报错。 |
+| `ports` | `19387:19387` | 暴露容器内的 Web GUI 控制台端口到宿主机。 |
+| `DSH_MODE` | `unrestricted` | 关闭默认的模型指令审查与常规沙箱拦截。 |
+| `DSH_SANDBOX_POLICY` | `danger-full-access` | 开放容器内完整的文件读写与命令执行权限，关闭 ACL 限制。 |
+| `DSH_APPROVAL_POLICY` | `never` | 关闭敏感操作确认弹窗，所有读写和命令直接放行。 |
+| `DSH_AUTO_PURGE` | `true` | 容器启动时自动校验并打上 52 项 Purge 补丁与底层 Shim。 |
+| `volumes: workspace` | `./data/workspace` | 将宿主机目录挂载为容器工作区，防止容器销毁导致代码丢失。 |
+| `volumes: prompt-inject` | `prompt-inject.md` | 以只读方式挂载自定义系统提示词配置文件。 |
+| `security_opt` / `cap_add` | `unconfined` / `SYS_ADMIN` | 放宽容器默认的系统调用限制，避免内部调试工具或沙箱嵌套报错。 |
 
-### 3. 一键启动流程
+### 3. 启动容器服务
 
-1. **建立目录并初始化配置文件**：
-   ```bash
-   mkdir -p ./data/dsh_home ./data/workspace ./config
-   touch ./config/prompt-inject.md
-   ```
+依次在终端执行以下命令初始化目录并启动容器：
 
-2. **后台拉起服务**：
-   ```bash
-   docker compose up -d
-   ```
+```bash
+# 1. 创建持久化目录与自定义提示词空文件
+mkdir -p ./data/dsh_home ./data/workspace ./config
+touch ./config/prompt-inject.md
 
-3. **访问 Web 控制面板**：
-   浏览器打开 `http://localhost:19387` 即可进入图形交互界面。
+# 2. 后台启动容器
+docker compose up -d
+```
 
----
+启动完成后，直接用浏览器访问 `http://localhost:19387` 就能打开图形化操作界面。
 
-## 四、CliRelay 与 dsh-node 深度联动配置
+## 四、将 dsh-node 接入 CliRelay 网关
 
-### 1. 统一中继端点与渠道接入
+### 1. 部署并配置 CliRelay
 
-如果同时运行 CliRelay，可以将其与 `dsh-node` 置于同一 Docker 虚拟网络内（或借助 `host.docker.internal` 直连）。
+如果你还没跑起 CliRelay，可以直接按官方推荐的 Compose 方式拉起完整服务链（包含主程序、PostgreSQL 15、Redis 7 和自动更新组件）：
 
-CliRelay 推荐部署规范：
 ```bash
 git clone https://github.com/kittors/CliRelay.git
 cd CliRelay
 mkdir -p auths logs data
-# 启动 CliRelay、PostgreSQL 15、Redis 7 与 updater 容器链
+
+# 启动 CliRelay 及配套数据库与缓存服务
 docker compose up -d
 ```
 
-服务启动后：
-- 打开 `http://localhost:8317/manage` 登录管理面板；
-- 在 **AI 供应商 (AI Providers)** 中配置你的 DeepSeek / Claude / Gemini / OpenAI 密钥与代理池；
-- 在 **API 密钥 (API Keys)** 页面生成一把客户端 Key（如 `cr-live-xxxxxx`），绑定允许访问的模型分组；
-- 此时本地统一 API 端点为：`http://localhost:8317/v1`。
+服务跑起来之后，按以下三步完成渠道配置：
 
-### 2. 让 dsh-node 接入 CliRelay 路由
+* 浏览器打开 `http://localhost:8317/manage` 进入管理后台。
+* 在 **AI 供应商（AI Providers）** 页面填入你自己的 DeepSeek、Claude、Gemini 或 OpenAI 密钥，配置好上游账号池。
+* 在 **API 密钥（API Keys）** 页面新建一把分发给本地工具用的客户端 Key（格式如 `cr-live-xxxxxx`），并勾选允许调用的模型分组。此时你的本地统一接入地址就是 `http://localhost:8317/v1`。
 
-在 `dsh-node` 的配置文件中（或在挂载的 `./data/dsh_home/config.json` 及环境变量中），将模型服务商的基准 URL（Base URL）指向 CliRelay 网关：
+### 2. 修改 dsh-node 路由配置
+
+打开 `dsh-node` 挂载出来的配置文件 `./data/dsh_home/config.json`（或通过环境变量注入），把模型接口地址指向刚刚配好的 CliRelay 网关：
 
 ```json
 {
@@ -220,47 +177,39 @@ docker compose up -d
 }
 ```
 
-> **提示**：如果两套服务运行在同一 Compose 网络，直接将 `base_url` 设置为 `http://cli-proxy-api:8317/v1` 即可享受毫秒级容器内网通信。
+> **网络配置小贴士**：如果你把 `dsh-node` 和 `CliRelay` 放在同一个 Docker Compose 网络（Network）下，可以把 `base_url` 直接改成容器服务名 `http://cli-proxy-api:8317/v1`，走 Docker 内部网桥通信更稳定。
 
-### 3. 运行时观测与智能容灾
+### 3. 运行监控与自动容灾效果
 
-借助 CliRelay 强大的 PostgreSQL 运行时数据栈，在 Agent 全自动执行过程中：
-- **实时用量与成本掌控**：在 `/manage` 仪表盘中实时观察 Agent 生成每一批代码所消耗的 Prompt Tokens、Completion Tokens 及对应的延迟曲线；
-- **无感故障转移 (Failover)**：当某个上游模型发生限频（HTTP 429）或服务不可用（HTTP 502）时，CliRelay 会在网关层秒级切换至备用渠道，防止 `dsh-node` 的长链路自动化任务因单点故障中断。
+打通链路后，当你在 `dsh-node` 里跑大工作量的长任务时，CliRelay 会在背后帮你兜底两件事：
 
----
+* **算清每一笔 Token 账**：在 `/manage` 面板里可以直观看到每次代码生成消耗了多少 Prompt Tokens 和 Completion Tokens，以及各个上游接口的响应延迟走势。
+* **遇错自动切线路**：长任务最怕跑到一半遇到上游报 `HTTP 429`（请求过快）或 `HTTP 502`（网关超时）。接入 CliRelay 后，一旦主渠道报错，网关会在毫秒级自动把请求切到备用 API Key 或同级别替代模型上，让 `dsh-node` 的自动化流水线稳稳跑完。
 
-## 五、备选轻量方案：无头终端模式 (Headless Mode)
+## 五、轻量替代方案：宿主机无头模式 (Headless Mode)
 
-针对不需要 Docker 虚拟化环境、希望在 CI/CD 流水线或本地无桌面终端极速调用的场景，可以直接在主机使用 CLI 执行无头任务：
+如果你不想折腾 Docker，或者打算直接在 CI/CD 流水线（如 GitHub Actions）、无桌面服务器里调用 DSH，可以直接在宿主机装好 Node.js（建议 Node ≥ 22）和 `@deepseek-ai/dsh`，使用无头模式运行：
 
 ```bash
-# 激活环境并以全量开放模式进入无头交互
+# 进入全开放权限的交互式无头终端
 dsh headless --danger-full-access --approval-policy never --workspace ./default-workspace
+
+# 或者直接通过 -e 参数单次执行指定任务（适合写进自动化脚本）
+dsh headless --danger-full-access -e "请运行当前项目的全部单元测试，并自动修复所有报错"
 ```
 
-* **环境要求**：本地已安装 Node.js（推荐 Node ≥ 22）及 DSH 官方二进制包；
-* **快捷执行单任务**：
-  ```bash
-  dsh headless --danger-full-access -e "请对当前代码工程执行单元测试并修复所有报错"
-  ```
-* **特点**：无头模式下不占用 Web 端口与 UI 渲染资源，所有执行日志直接输出至标准输出（stdout），非常适合作为定时任务或 GitHub Actions 自动化 Runner。
+无头模式不会启动 Web 端口，也不渲染前端界面，所有执行过程和结果直接输出到终端标准输出（`stdout`），非常适合放进定时任务（Cron）或 CI Runner 里直接调用。
 
----
+## 六、安全注意事项与免责说明
 
-## 六、安全合规与使用声明
+* **必须在隔离环境中运行**：开启 `danger-full-access` 和 `dsh-purge` 后，Agent 具备直接修改文件和执行系统命令的能力。请务必在 Docker 容器、虚拟机或专用的离线测试靶场中使用，切勿直接在存有重要生产数据或个人隐私文件的宿主机根目录下裸跑。
+* **合规使用边界**：本文介绍的补丁与自动化配置仅用于本地研发提效与合法授权的网络安全测试，请勿用于任何未授权的渗透测试或违反各模型服务商条款的场景。
+* **项目独立性**：文中提到的 [dsh-purge](https://github.com/YuJunZhiXue/dsh-purge) 与 [CliRelay](https://github.com/kittors/CliRelay) 均为开源社区独立维护项目，与各商业大模型官方团队无隶属关系。
 
-1. **合法受控环境限定**：本项目涉及的技术、补丁与编排配置仅供开发者在**自身合法拥有或取得书面授权的本地开发环境、离线沙箱及合规靶场**中用于自动化研发效能提升与网络安全防护评测；
-2. **严禁越界滥用**：严禁利用任何特权穿透与自动化工具从事未授权网络入侵、漏洞利用、数据窃取或违反大模型服务商服务协议的活动；
-3. **独立性声明**：本文介绍的开源项目均为社区独立开发维护成果，与各大商业模型官方机构无任何直接商业隶属关系。
-
----
-
-## 参考
+## 参考链接
 
 1. **dsh-purge 项目仓库**：[GitHub - YuJunZhiXue/dsh-purge](https://github.com/YuJunZhiXue/dsh-purge)
-2. **DeepSeek Harness 官方项目**：[DeepSeek Harness Official Hub](https://www.deepseek.com/harness/)
-3. **CliRelay 项目仓库**：[GitHub - kittors/CliRelay](https://github.com/kittors/CliRelay)
-4. **CliRelay Web 控制面板 (codeProxy)**：[GitHub - kittors/codeProxy](https://github.com/kittors/codeProxy)
-5. **CliRelay 官方使用文档**：[CliRelay 帮助手册](https://help.router-for.me/cn/)
-6. **CLIProxyAPI 上游开源项目**：[GitHub - router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)
+2. **DeepSeek Harness 官方仓库**：[GitHub - deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)（[官方文档](https://deepseek-harness.github.io/deepseek-harness/)）
+3. **CliRelay 项目仓库**：[GitHub - kittors/CliRelay](https://github.com/kittors/CliRelay)（[中文说明文档](https://github.com/kittors/CliRelay/blob/main/README_CN.md)）
+4. **CLIProxyAPI 上游项目**：[GitHub - router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)
+5. **DSH 桌面端社区项目**：[GitHub - dataelement/dsh-desktop](https://github.com/dataelement/dsh-desktop)

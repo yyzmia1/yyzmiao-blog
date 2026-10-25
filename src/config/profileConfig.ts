@@ -24,7 +24,7 @@ export const profileConfig: ProfileConfig = {
 		{
 			name: "GitHub",
 			icon: "fa7-brands:github",
-			url: "https://github.com/yyzmiao",
+			url: "https://github.com/yyzmia1",
 			showName: false,
 		},
 		{

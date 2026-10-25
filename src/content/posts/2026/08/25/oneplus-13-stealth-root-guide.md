@@ -2,7 +2,7 @@
 title: "一加 13 过初阶完美root环境教程"
 description: "该方案可过春秋Native check-Eros 4.2 一、Root 方案选择 二、内核编译与刷入 1.编译"
 published: 2026-08-25T18:44:36+08:00
-updated: 2026-08-25T19:27:28+08:00
+updated: 2026-10-17T18:47:00+08:00
 category: "技术"
 subcategory: "移动设备"
 tags: ["一加 13", "Root", "KernelSU", "SUSFS"]
@@ -21,7 +21,7 @@ draft: false
 1.编译 AnyKernel3 (AK3) 格式刷机包  
   
 参考我的另一篇教程:xxx.(暂时还没写)  
-以及我的op13+resukisu+susfs的成品仓库:[仓库地址](https://github.com/yyzmiao/OnePlus_ReSukiSU_SUSFS)
+以及我的op13+resukisu+susfs的成品仓库:[仓库地址](https://github.com/yyzmia1/OnePlus_ReSukiSU_SUSFS)
 
 2.刷入后，在 Root 管理器中完成以下设置:
 

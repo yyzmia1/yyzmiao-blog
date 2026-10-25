@@ -2,7 +2,7 @@
 title: "Whisper-Fast-GUI – 本地视频字幕提取"
 description: "Whisper-Fast-GUI：一款为本地语音转写而生的极简桌面工具 背景 OpenAI 开源的 Whisp"
 published: 2026-07-17T09:30:56+08:00
-updated: 2026-08-25T19:17:53+08:00
+updated: 2026-10-17T18:40:00+08:00
 category: "项目"
 subcategory: "自研项目"
 tags: ["Whisper", "语音识别", "桌面工具"]
@@ -20,7 +20,7 @@ OpenAI 开源的 Whisper 模型在语音识别领域具备极高的准确率，�
 
 Whisper-Fast-GUI 是针对上述问题设计的开源桌面工具，目标是将“本地语音转写”这件事简化为“双击运行、拖拽即用”。
 
-**项目地址**：GitHub 仓库（详见原文链接）
+**项目地址**：[GitHub 仓库](https://github.com/yyzmia1/Whisper-Fast-GUI)
 
 * * *
 
@@ -84,6 +84,6 @@ pip install nvidia-cuda-runtime-cu12 nvidia-cublas-cu12 nvidia-cudnn-cu12
 
 Whisper-Fast-GUI 面向的是希望使用 Whisper 能力、但不愿承担环境配置与命令行操作成本的用户群体。项目开源，欢迎在 GitHub 仓库中提交 Issue 反馈需求或参与改进。
 
-👉 **[开源地址：点击直达我的 GitHub 仓库](https://github.com/y0y7z1m5/Whisper-Fast-GUI)**
+👉 **[开源地址：点击直达我的 GitHub 仓库](https://github.com/yyzmia1/Whisper-Fast-GUI)**
 
 *(欢迎去点个 Star 支持一下！)*

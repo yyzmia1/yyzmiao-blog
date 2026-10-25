@@ -8,14 +8,14 @@
 
 如果你对文章内容有疑问，或者想一起交流折腾心得，可以通过以下渠道联系我：
 
-- **GitHub**：<a href="https://github.com/yyzmiao" target="_blank" rel="noopener noreferrer">@yyzmiao</a>
+- **GitHub**：<a href="https://github.com/yyzmia1" target="_blank" rel="noopener noreferrer">@yyzmia1</a>
 - **Telegram**：<a href="https://t.me/yyzmiao" target="_blank" rel="noopener noreferrer">@yyzmiao</a>
 
 
 ## 关于本站
 
 - **内容定位**：个人实践备忘录，聚焦问题复现与可落地的解决思路。
-- **源码开放**：博客源码完全公开在 [GitHub](https://github.com/yyzmiao/yyzmiao-blog)，欢迎提 Issue 或 PR 交流。
+- **源码开放**：博客源码完全公开在 [GitHub](https://github.com/yyzmia1/yyzmiao-blog)，欢迎提 Issue 或 PR 交流。
 
 ## 本站技术栈
 
